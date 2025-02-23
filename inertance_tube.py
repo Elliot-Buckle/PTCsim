@@ -71,6 +71,7 @@ class InertanceTube:
                 self.pressures = average_pressure
                 self.velocities += velocity_change
                 self.densities += density_change
+                self.reynolds = self.densities*self.velocities*self.diameter/self.absolute_viscosity
                 self.inlet_mass_flows[step] = np.pi/4 * self.diameter**2 * self.densities[0] * self.velocities[0]
                 self.inlet_pressures[step] = self.pressures[0]
                 #break
@@ -79,6 +80,7 @@ class InertanceTube:
             #self.reynolds = self.densities*self.velocities*self.diameter/self.absolute_viscosity
         # plt.figure("inlet pressure vs time")
         # plt.plot(self.times, self.inlet_pressures)
+        print(np.max(self.reynolds))
         plt.figure("inlet mass flow vs time")
         plt.plot(360*self.times/self.period, self.inlet_mass_flows)
         plt.figure("pressure vs x")
