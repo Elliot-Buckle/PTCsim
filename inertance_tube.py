@@ -35,10 +35,12 @@ class InertanceTube:
         #tstep = self.period/period_divisions
         #self.times = np.arange(0, self.period*periods, tstep)
         self.times = np.linspace(0, self.period, period_divisions)
+        self.angles = 360* self.times/self.period
         tstep = self.times[1]
         
         self.inlet_mass_flows = np.zeros(period_divisions)
         self.inlet_pressures = np.zeros(period_divisions)
+        self.inlet_velocities = np.zeros(period_divisions)
         for period in range(periods):
             for step in range(period_divisions):
                 self.pressures[0] = self.mean_pressure + self.pressure_amplitude*np.sin(self.angular_velocity * self.times[step])
@@ -68,21 +70,27 @@ class InertanceTube:
                     average_velocity = self.velocities + velocity_change/2
                     average_density = self.densities + density_change/2
                 
-                self.pressures = average_pressure
+                #self.pressures = average_pressure
                 self.velocities += velocity_change
                 self.densities += density_change
+                self.pressures = polytropic_constant*self.densities**polytropic_index
                 self.reynolds = self.densities*self.velocities*self.diameter/self.absolute_viscosity
                 self.inlet_mass_flows[step] = np.pi/4 * self.diameter**2 * self.densities[0] * self.velocities[0]
                 self.inlet_pressures[step] = self.pressures[0]
+                self.inlet_velocities[step] = self.velocities[0]
                 #break
             print(abs(self.inlet_mass_flows[0] - self.inlet_mass_flows[-1]))
-            
+        print(self.angles[np.argmax(self.inlet_mass_flows)], self.angles[np.argmin(self.inlet_mass_flows)])
+        self.phase_lag = (self.angles[np.argmax(self.inlet_mass_flows)] - 90 + self.angles[np.argmin(self.inlet_mass_flows)] - 270) / 2
+        print("average velocity", np.average(np.abs(self.inlet_velocities)))
             #self.reynolds = self.densities*self.velocities*self.diameter/self.absolute_viscosity
         # plt.figure("inlet pressure vs time")
         # plt.plot(self.times, self.inlet_pressures)
         print(np.max(self.reynolds))
         plt.figure("inlet mass flow vs time")
-        plt.plot(360*self.times/self.period, self.inlet_mass_flows)
+        plt.plot(self.angles, self.inlet_mass_flows)
+        plt.figure("inlet vleocity vs time")
+        plt.plot(self.angles, self.inlet_velocities)
         plt.figure("pressure vs x")
         plt.plot(self.xpoints, self.pressures*10**-5)
         plt.figure("velocity vs x")
@@ -100,3 +108,4 @@ class InertanceTube:
 if __name__ == "__main__":
     inertance_tube = InertanceTube(length=1.689, diameter=1.016E-3, mean_pressure=2.5E+6, pressure_amplitude=0.2777777778E+6, frequency=55, mean_temperature=300)
     inertance_tube.simulate()
+    print(inertance_tube.phase_lag)
