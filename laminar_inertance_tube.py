@@ -11,7 +11,7 @@ class LaminarInertanceTube:
         self.absolute_viscosity = 1.96E-5
         self.specific_gas_constant = 2077.1
     
-    def simulate(self, frequency:float, mean_pressure:float, pressure_ratio:float, mean_temperature:float, polytropic_index:float, x_divisions:int=100, t_divisions:int=100):
+    def simulate(self, frequency:float, mean_pressure:float, pressure_ratio:float, mean_temperature:float, polytropic_index:float, x_divisions:int=100, t_divisions:int=10000):
         # Calculating some constants
         pressure_amplitude = mean_pressure * (pressure_ratio - 1)/(pressure_ratio + 1)
         mean_density = mean_pressure/(mean_temperature * self.specific_gas_constant)
@@ -44,6 +44,9 @@ class LaminarInertanceTube:
         # Iteration
         i = 0
         for t in times:
+            if i == 1000:
+                break
+            
             # Pulse Tube Inlet boundary condition
             pressures[0] = pulse_tube_inlet_pressure(t)
             densities[0] = pulse_tube_inlet_density(t)
@@ -52,52 +55,50 @@ class LaminarInertanceTube:
             pressures[-1] = mean_pressure
             densities[-1] = mean_density
             
-            # X Difference arrays
-            velocity_xgradient = first_derivative(velocities, xstep)
-            density_xgradient = first_derivative(densities, xstep)
-            pressure_xgradient = first_derivative(pressures, xstep)
-            # mass_flux_xgradient = first_derivative(mass_fluxes, xstep)
+            # first x derivative arrays
+            velocity_x_derivative = first_derivative(velocities, xstep)
+            density_x_derivative = first_derivative(densities, xstep)
+            pressure_x_derivative = first_derivative(pressures, xstep)
             
-            # Applying pulse tube inlet flow acceleration
-            if velocities[0] == 0:
-                velocities[0] += tstep * -(pressure_xgradient[0])/densities[0]
-            else:
-                velocities[0] += tstep * (-1/densities[0] * (
-                    polytropic_coefficient * polytropic_index * densities[0]**(polytropic_index - 1)
-                    * (-1/velocities[0]*(inlet_density_t_derivative(t) + densities[0] * velocity_xgradient[0]))
-                    + friction_coefficient * velocities[0]))
-                
-            # Applying buffer tank inlet flow acceleration
-            if velocities[-1] == 0:
-                velocities[-1] += tstep * -1/mean_density * pressure_xgradient[-1]
-            else:
-                velocities[-1] += tstep * (polytropic_coefficient * polytropic_index * mean_density**(polytropic_index - 1)*velocity_xgradient[-1]/velocities[-1] - friction_coefficient*velocities[-1]/mean_density)
-                
-            # Now the boundary conditions have been applied, the flow in the rest of the inertance tube is evolved
-            velocity_change = tstep * -1/densities*(pressure_xgradient + friction_coefficient*velocity_xgradient)
-            density_change = tstep * -(densities*velocity_xgradient + velocities*density_xgradient)
+            # first t derivative arrays
+            velocity_t_derivative = -1/densities*(pressure_x_derivative + friction_coefficient * density_x_derivative)
+            density_t_derivative = -(densities*velocity_x_derivative + velocities*density_x_derivative)
+            pressure_t_derivative = polytropic_coefficient*polytropic_index*densities**(polytropic_index - 1)*density_t_derivative
             
-            # The changes at the inlet and outlet are set to zero, since they were calculated earlier
-            velocity_change[0] = 0
-            velocity_change[-1] = 0
-            density_change[0] = 0
-            density_change[-1] = 0
+            # xt derivative arrays
+            velocity_xt_derivative = first_derivative(velocity_t_derivative, xstep)
+            density_xt_derivative = first_derivative(density_t_derivative, xstep)
+            pressure_xt_derivative = first_derivative(pressure_t_derivative, xstep)
             
-            # The calculated density and velocity changes are added to their respective arrays
-            velocities += velocity_change
-            densities += density_change
+            # second t derivative arrays
+            velocity_tt_derivative = (densities**-2 * density_t_derivative*pressure_x_derivative
+                                      - densities**-1 * pressure_xt_derivative
+                                      + friction_coefficient*velocity_t_derivative)
             
-            # Pressures are recaluclated from the new densities using a polytropic equation of state
+            density_tt_derivative = (-density_t_derivative*velocity_x_derivative
+                                     - densities*velocity_xt_derivative
+                                     - velocity_t_derivative*density_x_derivative
+                                     - velocities*density_xt_derivative)
+            
+            # Calculating new densities, excluding boundaries
+            densities[1:-1] += density_t_derivative[1:-1] * tstep + 0.5 * density_tt_derivative[1:-1] * tstep**2
+            velocities += velocity_t_derivative * tstep + 0.5 * velocity_tt_derivative * tstep **2
+            
+            #Recalculating pressures
             pressures = pressure(densities)
             
-            i+=1
-            if i == 2:
-                break
+            #print(velocity_t_derivative[0], velocity_tt_derivative[0])
+            
+            i += 1
         
+        plt.figure("P")
         plt.plot(x_positions, pressures)
+        plt.figure("U")
+        plt.plot(x_positions, velocities)
         plt.show()
         
 
 if __name__ == "__main__":
     inertance_tube = LaminarInertanceTube(length=1.689, diameter=1.016E-3)
+    print(2.5E+6 * (1.1 - 1)/(1.1 + 1) * 1E-5)
     inertance_tube.simulate(55, 2.5E+6, 1.1, 300, 1)
