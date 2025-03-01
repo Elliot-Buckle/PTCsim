@@ -11,7 +11,7 @@ class LaminarInertanceTube:
         self.absolute_viscosity = 1.96E-5
         self.specific_gas_constant = 2077.1
     
-    def simulate(self, frequency:float, mean_pressure:float, pressure_ratio:float, mean_temperature:float, polytropic_index:float, x_divisions:int=100, t_divisions:int=10000):
+    def simulate(self, frequency:float, mean_pressure:float, pressure_ratio:float, mean_temperature:float, polytropic_index:float, x_divisions:int=10, t_divisions:int=1000):
         # Calculating some constants
         pressure_amplitude = mean_pressure * (pressure_ratio - 1)/(pressure_ratio + 1)
         mean_density = mean_pressure/(mean_temperature * self.specific_gas_constant)
@@ -44,8 +44,8 @@ class LaminarInertanceTube:
         # Iteration
         i = 0
         for t in times:
-            if i == 1000:
-                break
+            # if i == 1:
+            #     break
             
             # Pulse Tube Inlet boundary condition
             pressures[0] = pulse_tube_inlet_pressure(t)
@@ -74,7 +74,7 @@ class LaminarInertanceTube:
             velocity_tt_derivative = (
                                         densities**-2 * density_t_derivative*pressure_x_derivative
                                       - densities**-1 * pressure_xt_derivative
-                                      + friction_coefficient*velocity_t_derivative
+                                      - friction_coefficient*velocity_t_derivative
                                       )
             density_tt_derivative = (
                                      - density_t_derivative*velocity_x_derivative
