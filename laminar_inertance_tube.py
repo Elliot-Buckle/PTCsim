@@ -71,14 +71,17 @@ class LaminarInertanceTube:
             pressure_xt_derivative = first_derivative(pressure_t_derivative, xstep)
             
             # second t derivative arrays
-            velocity_tt_derivative = (densities**-2 * density_t_derivative*pressure_x_derivative
+            velocity_tt_derivative = (
+                                        densities**-2 * density_t_derivative*pressure_x_derivative
                                       - densities**-1 * pressure_xt_derivative
-                                      + friction_coefficient*velocity_t_derivative)
-            
-            density_tt_derivative = (-density_t_derivative*velocity_x_derivative
+                                      + friction_coefficient*velocity_t_derivative
+                                      )
+            density_tt_derivative = (
+                                     - density_t_derivative*velocity_x_derivative
                                      - densities*velocity_xt_derivative
                                      - velocity_t_derivative*density_x_derivative
-                                     - velocities*density_xt_derivative)
+                                     - velocities*density_xt_derivative
+                                     )
             
             # Calculating new densities, excluding boundaries
             densities[1:-1] += density_t_derivative[1:-1] * tstep + 0.5 * density_tt_derivative[1:-1] * tstep**2
