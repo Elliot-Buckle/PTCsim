@@ -3,8 +3,8 @@ import matplotlib.pyplot as plt
 from scipy.optimize import root
 from miscellaneous import first_derivative
 
-class LaminarInertanceTube:
-    def __init__(self, length:float, diameter:float, buffer_tank_volume:float = 1, absolute_roughness:float = 0):
+class TurbulentInertanceTube:
+    def __init__(self, length:float, diameter:float, buffer_tank_volume:float = 1, absolute_roughness:float = 0.15E-3):
         self.length = length
         self.diameter = diameter
         self.buffer_tank_volume = buffer_tank_volume
@@ -12,14 +12,15 @@ class LaminarInertanceTube:
         
         self.absolute_viscosity = 1.96E-5
         self.specific_gas_constant = 2077.1
+        self.friction_factor = (-2*np.log10(absolute_roughness/(3.7*self.diameter)))**-2
     
-    def simulate(self, frequency:float, mean_pressure:float, pressure_ratio:float, mean_temperature:float, polytropic_index:float, x_divisions:int=10, t_divisions:int=1000, periods:int=10, plot:bool = True):
+    def simulate(self, frequency:float, mean_pressure:float, pressure_ratio:float, mean_temperature:float, polytropic_index:float, x_divisions:int=100, t_divisions:int=10000, periods:int=10, plot:bool = True):
         # Calculating some constants
         pressure_amplitude = mean_pressure * (pressure_ratio - 1)/(pressure_ratio + 1)
         mean_density = mean_pressure/(mean_temperature * self.specific_gas_constant)
         polytropic_coefficient = (mean_pressure/mean_density**polytropic_index)
         period = 1 / frequency
-        friction_coefficient = 32*self.absolute_viscosity/self.diameter**2
+        friction_coefficient = self.friction_factor/(2 * self.diameter) #0.1582*self.absolute_viscosity**(1/4)*self.diameter**-5
         tstep = period / (t_divisions)
         xstep = self.length / x_divisions
         vstep = xstep * self.flow_area
@@ -37,6 +38,7 @@ class LaminarInertanceTube:
         
         # Discretization
         velocities = np.zeros(x_divisions, dtype=float)
+        mass_fluxes = np.zeros(x_divisions, dtype=float)
         pressures = np.full(x_divisions, mean_pressure, dtype=float)
         densities = np.full(x_divisions, mean_density, dtype=float)
         midpoint_densities = np.full(x_divisions - 1, mean_density, dtype=float)
@@ -52,6 +54,8 @@ class LaminarInertanceTube:
         # Iteration
         i = 0
         for t in times:
+            # if i == 3:
+            #     break
             
             # first x derivative arrays
             velocity_x_derivative = first_derivative(velocities, xstep)
@@ -59,8 +63,9 @@ class LaminarInertanceTube:
             pressure_x_derivative = first_derivative(pressures, xstep)
             
             # first t derivative arrays
-            velocity_t_derivative = -1/densities*(pressure_x_derivative + friction_coefficient * velocities)
+            velocity_t_derivative = -1/densities*(pressure_x_derivative + np.sign(velocities) * friction_coefficient * velocities**2)
             density_t_derivative = -(densities*velocity_x_derivative + velocities*density_x_derivative)
+            mass_flux_t_derivative = density_t_derivative*velocities + velocity_t_derivative*densities
             
             # Boundary conditions
             density_t_derivative[0] = inlet_density_t_derivative(t)
@@ -74,15 +79,16 @@ class LaminarInertanceTube:
             pressure_xt_derivative = first_derivative(pressure_t_derivative, xstep)
             
             # # second t derivative arrays
-            velocity_tt_derivative = (
-                                        densities**-2 * density_t_derivative*pressure_x_derivative
-                                    - densities**-1 * pressure_xt_derivative
-                                    - friction_coefficient*velocity_t_derivative
-                                    )
+            velocity_tt_derivative = (densities**-2 * density_t_derivative*pressure_x_derivative - densities**-1 * pressure_xt_derivative
+                                      - np.sign(velocities) * friction_coefficient * (densities**-2*density_t_derivative*velocities**2 - 2*densities**-1 * velocity_t_derivative * velocities))
             
             # Calculating new densities, excluding boundaries
+            velocity_changes = velocity_t_derivative * tstep + 0.5 * velocity_tt_derivative * tstep **2
+            # velocity_change_limit = 1
+            # velocities = velocities + np.where(np.abs(velocity_changes) > velocity_change_limit, velocity_change_limit, velocity_changes)
             velocities += velocity_t_derivative * tstep + 0.5 * velocity_tt_derivative * tstep **2
-            mass_flows = (velocities * densities * self.flow_area) * tstep
+            mass_fluxes = velocities * densities
+            mass_flows = (mass_fluxes * self.flow_area) * tstep
             midpoint_densities += (mass_flows - np.roll(mass_flows, -1))[:-1]/vstep
 
             # Calculaing new densities from midpoints
@@ -140,9 +146,9 @@ class LaminarInertanceTube:
         
 
 if __name__ == "__main__":
-    inertance_tube = LaminarInertanceTube(length=1.689, diameter=1.016E-3, buffer_tank_volume=0.01)
-    # print(2.5E+6 * (1.1 - 1)/(1.1 + 1) * 1E-5)
-    inertance_tube.simulate(frequency=30, mean_pressure=2.5E+6, pressure_ratio=1.05, mean_temperature=300, polytropic_index=1, periods=3)
+    inertance_tube = TurbulentInertanceTube(length=1.689, diameter=1.016E-3)
+    #inertance_tube.simulate(55, 2.5E+6, 1.25, 300, 1)
+    #pass
     pressure_ratios = [1.05, 1.1, 1.15, 1.2, 1.25, 1.3, 1.35, 1.4]
     frequencies = [30, 40, 50, 60, 70, 80, 90]
     
@@ -152,5 +158,4 @@ if __name__ == "__main__":
     print("")
     
     for frequency in frequencies:
-        inertance_tube.simulate(frequency=frequency, mean_pressure=2.5E+6, pressure_ratio=1.25, mean_temperature=300, polytropic_index=1, plot=False)
-    
+        inertance_tube.simulate(frequency=frequency, mean_pressure=2.5E+6, pressure_ratio=1.25, mean_temperature=300, polytropic_index=1.67, plot=False)
